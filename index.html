@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MPBF Rule Engine</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#f4f5f7;font-family:Arial,sans-serif;font-size:13px;color:#222}
+button,input,select{font-family:Arial,sans-serif}
+
+#topbar{background:#1a3c6e;padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:48px;position:sticky;top:0;z-index:200}
+.app-title{color:#fff;font-size:15px;font-weight:bold}
+.app-sub{color:#aac4e8;font-size:11px;margin-left:8px}
+.save-btn{background:#fff;color:#1a3c6e;border:none;padding:5px 16px;font-size:12px;font-weight:bold;cursor:pointer;border-radius:2px}
+.save-btn:hover{background:#e8f0fb}
+.save-btn.saved{background:#e6f4ea;color:#2e7d32}
+
+#tabnav{background:#fff;border-bottom:2px solid #dde1e7;padding:0 20px;display:flex;position:sticky;top:48px;z-index:199}
+.tab{background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;padding:10px 16px;font-size:13px;color:#555;cursor:pointer}
+.tab.active{border-bottom-color:#1a3c6e;color:#1a3c6e;font-weight:bold}
+.tab:hover:not(.active){color:#1a3c6e}
+
+.panel{display:none;padding:18px 20px;max-width:1000px}
+.panel.active{display:block}
+.sec-title{font-size:14px;font-weight:bold;color:#1a3c6e;margin-bottom:4px}
+.sec-desc{font-size:11px;color:#777;margin-bottom:14px}
+
+/* RULE CARD */
+.rule-card{background:#fff;border:1px solid #d0d5dd;border-left:3px solid #ccc;border-radius:2px;margin-bottom:8px}
+.rule-card.on{border-left-color:#1a3c6e}
+.rule-card.err{border-left-color:#c00}
+.rule-header{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;user-select:none}
+.rule-header:hover{background:#f9fafb}
+.rule-meta{flex:1;min-width:0}
+.rule-name-row{font-weight:bold;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rule-preview{font-size:11px;color:#777;margin-top:2px;font-family:monospace}
+.rule-body{padding:12px 14px;border-top:1px solid #e8eaed;display:none}
+.rule-body.open{display:block}
+.pri-tag{font-size:10px;color:#aaa;font-weight:normal}
+.tag{font-size:10px;padding:1px 6px;border-radius:2px;border:1px solid}
+.tag-off{background:#f4f5f7;color:#888;border-color:#ddd}
+.tag-type{background:#e8f0fb;color:#1a3c6e;border-color:#c5d8f5}
+.tag-err{background:#fdecea;color:#c00;border-color:#f5c2c2}
+.tag-warn{background:#fff3e0;color:#e65100;border-color:#ffe0b2}
+
+/* TOGGLE */
+.toggle{width:38px;height:21px;border-radius:11px;background:#bbb;position:relative;cursor:pointer;flex-shrink:0;transition:background .15s}
+.toggle.on{background:#1a3c6e}
+.toggle::after{content:'';position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.toggle.on::after{left:20px}
+
+/* FORM */
+label.fl{display:block;font-size:11px;color:#555;margin-bottom:3px;font-weight:bold}
+.fi{width:100%;border:1px solid #ccc;border-radius:2px;padding:4px 7px;font-size:12px;background:#fff}
+.fi:focus{outline:none;border-color:#1a3c6e}
+.fsel{border:1px solid #ccc;border-radius:2px;padding:4px 7px;font-size:12px;background:#fff;cursor:pointer}
+.fsel:focus{outline:none;border-color:#1a3c6e}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.col{flex:1;min-width:120px}
+hr.div{border:none;border-top:1px solid #e8eaed;margin:10px 0}
+
+/* CONDITIONS */
+.cond-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap}
+.c-sel{border:1px solid #ccc;border-radius:2px;padding:3px 6px;font-size:12px;background:#fff}
+.c-inp{border:1px solid #ccc;border-radius:2px;padding:3px 6px;font-size:12px;width:75px;background:#fff}
+.logic-btn{border:1px solid #1a3c6e;background:#e8f0fb;color:#1a3c6e;border-radius:2px;padding:2px 10px;font-size:11px;font-weight:bold;cursor:pointer}
+.sec-sub{font-size:11px;font-weight:bold;text-transform:uppercase;color:#888;letter-spacing:.4px;margin:12px 0 6px;display:flex;align-items:center;gap:8px}
+
+/* ── FORMULA TOKEN BUILDER ── */
+.formula-wrap{background:#f9fafb;border:1px solid #dde1e7;border-radius:2px;padding:10px}
+/* Token row — the visual builder */
+.token-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-height:36px;padding:6px 8px;background:#fff;border:1px solid #dde1e7;border-radius:2px;margin-bottom:8px}
+.token-empty{color:#bbb;font-size:12px;font-style:italic}
+
+/* Individual token blocks */
+.tok{display:inline-flex;align-items:center;gap:3px;border-radius:2px;padding:3px 8px;font-size:12px;border:1px solid}
+.tok-var  {background:#e8f0fb;border-color:#c5d8f5;color:#1a3c6e;font-weight:bold}
+.tok-num  {background:#e6f4ea;border-color:#b7dfbe;color:#2e7d32;font-weight:bold}
+.tok-pct  {background:#fff3e0;border-color:#ffe0b2;color:#e65100;font-weight:bold}
+.tok-op   {background:#f4f5f7;border-color:#dde1e7;color:#333;font-weight:bold;font-size:14px}
+.tok-open {background:#f4f5f7;border-color:#1a3c6e;color:#1a3c6e;font-weight:bold;font-size:14px}
+.tok-close{background:#f4f5f7;border-color:#1a3c6e;color:#1a3c6e;font-weight:bold;font-size:14px}
+
+/* Inline editable selects / inputs inside tokens */
+.tok select,.tok input{background:transparent;border:none;font-size:12px;font-weight:bold;cursor:pointer;outline:none;padding:0}
+.tok-var select{color:#1a3c6e;max-width:160px}
+.tok-num input{color:#2e7d32;width:60px;text-align:right}
+.tok-pct input{color:#e65100;width:40px;text-align:right}
+.tok-op  select{color:#333;font-size:14px;width:36px}
+
+/* Remove button on each token */
+.tok-x{background:none;border:none;color:#bbb;cursor:pointer;font-size:13px;line-height:1;padding:0 0 0 3px}
+.tok-x:hover{color:#c00}
+
+/* Add-token buttons */
+.add-row{display:flex;flex-wrap:wrap;gap:5px}
+.add-btn{background:#fff;border:1px solid;border-radius:2px;padding:3px 10px;font-size:11px;cursor:pointer}
+.add-btn:hover{opacity:.8}
+.add-btn-var {border-color:#1a3c6e;color:#1a3c6e}
+.add-btn-num {border-color:#2e7d32;color:#2e7d32}
+.add-btn-pct {border-color:#e65100;color:#e65100}
+.add-btn-op  {border-color:#888;color:#555}
+.add-btn-br  {border-color:#888;color:#1a3c6e;font-weight:bold}
+
+/* Formula preview — human-readable line */
+.formula-preview{font-size:12px;color:#444;margin-top:8px;padding:5px 8px;background:#fff;border:1px solid #e0e0e0;border-radius:2px;min-height:26px}
+.fp-var{color:#1a3c6e;font-weight:bold}
+.fp-num{color:#2e7d32;font-weight:bold}
+.fp-pct{color:#e65100;font-weight:bold}
+.fp-op{color:#555;padding:0 2px}
+.fp-br{color:#888;font-weight:bold}
+
+/* Validation hint */
+.formula-hint{font-size:11px;margin-top:5px;padding:3px 7px;border-radius:2px}
+.hint-ok  {background:#e6f4ea;color:#2e7d32;border:1px solid #b7dfbe}
+.hint-err {background:#fdecea;color:#c00;border:1px solid #f5c2c2}
+.hint-warn{background:#fff3e0;color:#e65100;border:1px solid #ffe0b2}
+
+/* BUTTONS */
+.btn{border-radius:2px;padding:4px 12px;font-size:12px;cursor:pointer;border:1px solid #ccc;background:#fff;color:#333}
+.btn:hover{background:#f0f0f0}
+.btn-primary{background:#1a3c6e;color:#fff;border-color:#1a3c6e}
+.btn-primary:hover{background:#153062}
+.btn-danger{color:#c00;border-color:#f5c2c2;background:#fff}
+.btn-danger:hover{background:#fff0f0}
+.btn-dashed{background:#fff;border:1px dashed #bbb;color:#888;border-radius:2px;padding:4px 12px;font-size:12px;cursor:pointer}
+.btn-dashed:hover{border-color:#1a3c6e;color:#1a3c6e}
+.btn-new{background:#1a3c6e;color:#fff;border:none;padding:5px 14px;font-size:12px;cursor:pointer;border-radius:2px}
+.btn-new:hover{background:#153062}
+
+/* AGG */
+.agg-box{background:#fff;border:1px solid #d0d5dd;border-radius:2px;padding:12px;margin-top:14px}
+.agg-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.agg-opt{background:#fff;border:1px solid #ccc;color:#555;border-radius:2px;padding:4px 12px;font-size:12px;cursor:pointer}
+.agg-opt.sel{background:#1a3c6e;color:#fff;border-color:#1a3c6e}
+
+/* VARS */
+.var-cat{font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #eee;color:#444}
+.var-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px}
+.var-chip{background:#fff;border:1px solid #dde1e7;border-radius:2px;padding:4px 9px;font-size:12px;display:flex;align-items:center;gap:6px}
+.vn{color:#1a3c6e;font-weight:bold;font-family:monospace}
+.vl{color:#666}.vs{color:#bbb;font-size:10px}
+.vdel{background:none;border:none;color:#bbb;cursor:pointer;font-size:13px;padding:0}
+.vdel:hover{color:#c00}
+.add-var-panel{background:#fff;border:1px solid #d0d5dd;border-radius:2px;padding:12px;margin-bottom:12px;display:none}
+
+/* SIMULATE */
+.sim-inputs{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px}
+.sim-field{min-width:140px;flex:1}
+.sim-field label{display:block;font-size:11px;font-weight:bold;margin-bottom:3px;color:#444}
+.sim-result{background:#fff;border:1px solid #ccc;border-left:3px solid #2e7d32;border-radius:2px;padding:12px;margin-bottom:8px}
+.sim-result.issue{border-left-color:#e65100}
+.sim-r-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.sim-r-name{font-weight:bold;color:#2e7d32;font-size:13px}
+.sim-r-amt{font-size:18px;font-weight:bold;color:#1a3c6e;font-family:monospace}
+.sim-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.spill{font-size:11px;padding:2px 7px;border-radius:2px}
+.spill.pass{background:#e6f4ea;border:1px solid #b7dfbe;color:#2e7d32}
+.spill.fail{background:#fdecea;border:1px solid #f5c2c2;color:#c00}
+.sim-none{background:#fdecea;border:1px solid #f5c2c2;border-radius:2px;padding:12px;color:#c00}
+.final-box{background:#eef3fa;border:1px solid #ccd6eb;border-radius:2px;padding:12px;display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+.final-label{font-weight:bold;color:#444;font-size:12px}
+.final-amt{font-size:20px;font-weight:bold;color:#1a3c6e;font-family:monospace}
+.sim-warn{font-size:11px;color:#e65100;margin-top:4px}
+.eval-row{font-size:11px;color:#888;margin-top:4px;font-family:monospace}
+
+#no-rules{display:none;border:1px dashed #ccc;padding:30px;text-align:center;color:#aaa;background:#fff}
+.header-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.pri-conflict{background:#fff3e0;border:1px solid #ffe0b2;border-radius:2px;padding:7px 12px;font-size:12px;color:#7a3800;margin-bottom:8px}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div style="display:flex;align-items:center">
+    <span class="app-title">Rule Engine — MPBF / Credit Limit</span>
+    <span class="app-sub">Supply Chain Finance</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span style="color:#aac4e8;font-size:12px" id="rule-count"></span>
+    <button class="save-btn" id="save-btn" onclick="handleSave()">Save</button>
+  </div>
+</div>
+
+<div id="tabnav">
+  <button class="tab active" onclick="switchTab('rules',this)">Rules</button>
+  <button class="tab" onclick="switchTab('variables',this)">Variables</button>
+  <button class="tab" onclick="switchTab('simulate',this)">Simulate</button>
+</div>
+
+<!-- RULES -->
+<div id="panel-rules" class="panel active">
+  <div class="header-row">
+    <div>
+      <div class="sec-title">Maximum Permissible Bank Finance — Rule Configuration</div>
+      <div class="sec-desc">Toggle rules ON/OFF. Build formulas by clicking the token buttons. Brackets work correctly — BODMAS is respected.</div>
+    </div>
+    <button class="btn-new" onclick="addRule()">+ New Rule</button>
+  </div>
+  <div style="background:#fff;border:1px solid #d0d5dd;border-radius:2px;padding:9px 14px;margin-bottom:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px">
+      <label style="font-size:12px;font-weight:bold;color:#444">Global Min (₹):</label>
+      <input id="global-floor" class="fi" type="number" placeholder="e.g. 50000" style="width:130px"/>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <label style="font-size:12px;font-weight:bold;color:#444">Global Cap (₹):</label>
+      <input id="global-cap" class="fi" type="number" placeholder="e.g. 5000000" style="width:130px"/>
+    </div>
+    <span style="font-size:11px;color:#999">Applied as final floor/cap after aggregation.</span>
+  </div>
+  <div id="pri-conflicts"></div>
+  <div id="rules-list"></div>
+  <div id="no-rules">No rules yet. Click "+ New Rule" to begin.</div>
+  <div class="agg-box">
+    <div style="font-size:12px;font-weight:bold;color:#444;margin-bottom:2px">Aggregation Mode</div>
+    <div style="font-size:11px;color:#999;margin-bottom:6px">When multiple rules match, how to compute the final limit</div>
+    <div class="agg-btns">
+      <button class="agg-opt sel" onclick="selAgg(this,'min')">MIN of all matched</button>
+      <button class="agg-opt" onclick="selAgg(this,'max')">MAX of all matched</button>
+      <button class="agg-opt" onclick="selAgg(this,'first')">First match only</button>
+      <button class="agg-opt" onclick="selAgg(this,'sum')">SUM of all matched</button>
+    </div>
+  </div>
+</div>
+
+<!-- VARIABLES -->
+<div id="panel-variables" class="panel">
+  <div class="header-row">
+    <div>
+      <div class="sec-title">Variable Registry</div>
+      <div class="sec-desc">These map to MySQL DB fields. The code name is used as the identifier in formula tokens.</div>
+    </div>
+    <button class="btn-new" onclick="toggleAddVar()">+ Add Variable</button>
+  </div>
+  <div class="add-var-panel" id="add-var-panel">
+    <div style="font-size:11px;font-weight:bold;text-transform:uppercase;color:#888;letter-spacing:.4px;margin-bottom:8px">New Variable</div>
+    <div class="row">
+      <div class="col" style="min-width:150px"><label class="fl">Code Name (DB field)</label><input class="fi" id="nv-name" placeholder="e.g. abb_12m" oninput="this.value=this.value.replace(/\s/g,'_').toLowerCase()"/></div>
+      <div class="col" style="min-width:200px"><label class="fl">Display Label</label><input class="fi" id="nv-label" placeholder="e.g. 12-month ABB (₹)"/></div>
+      <div class="col" style="flex:0;min-width:120px"><label class="fl">Source</label><select class="fsel" id="nv-src"><option>DB</option><option>Computed</option><option>External API</option><option>Manual Input</option></select></div>
+      <div class="col" style="flex:0;min-width:110px"><label class="fl">Category</label><select class="fsel" id="nv-cat"><option>Financial</option><option>Relationship</option><option>Applicant</option><option>Risk</option><option>Industry</option></select></div>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="btn btn-primary" onclick="saveNewVar()">Add</button>
+      <button class="btn" onclick="toggleAddVar()">Cancel</button>
+    </div>
+  </div>
+  <div id="vars-list"></div>
+</div>
+
+<!-- SIMULATE -->
+<div id="panel-simulate" class="panel">
+  <div class="sec-title">Simulate</div>
+  <div class="sec-desc" style="margin-bottom:12px">Enter applicant values and run to see which rules fire. Warnings shown for division by zero, null inputs, and negative results.</div>
+  <div id="sim-null-warn" style="display:none;background:#fff3e0;border:1px solid #ffe0b2;border-radius:2px;padding:7px 10px;font-size:12px;color:#7a3800;margin-bottom:10px"></div>
+  <div class="sim-inputs" id="sim-inputs"></div>
+  <button class="btn btn-primary" onclick="runSim()" style="margin-bottom:16px">Run Simulation</button>
+  <div id="sim-results"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════
+const CAT_COL = {Relationship:'#1a3c6e',Applicant:'#6a1a8e',Financial:'#1a6e3c',Risk:'#8e1a1a',Industry:'#7a5c00'};
+const OPERATORS = [{v:'==',l:'='},{v:'!=',l:'≠'},{v:'<',l:'<'},{v:'<=',l:'≤'},{v:'>',l:'>'},{v:'>=',l:'≥'},{v:'between',l:'between'}];
+const OP_SYMS = {'+':'+','−':'-','×':'*','÷':'/'};  // display → js
+const OP_DISP = {'+':'+','-':'−','*':'×','/':'÷'};  // js → display
+let aggMode = 'min';
+
+let variables = [
+  {id:'v1', name:'turnover',            label:'Annual Turnover (₹)',               source:'DB', category:'Financial'},
+  {id:'v2', name:'borrowings',          label:'Existing Borrowings (₹)',           source:'DB', category:'Financial'},
+  {id:'v3', name:'abb',                 label:'Average Bank Balance (₹)',          source:'DB', category:'Financial'},
+  {id:'v4', name:'total_loan_credited', label:'Total Loan Credited (₹)',           source:'DB', category:'Financial'},
+  {id:'v5', name:'total_credit',        label:'Total Credit Limit (₹)',            source:'DB', category:'Financial'},
+  {id:'v6', name:'adj_abb',             label:'Adjusted ABB (₹)',                  source:'Computed', category:'Financial'},
+  {id:'v7', name:'gst_turnover',        label:'GST Turnover (₹)',                  source:'DB', category:'Financial'},
+  {id:'v8', name:'industry_income',     label:'Industry Income (₹)',               source:'DB', category:'Industry'},
+  {id:'v9', name:'industry_margin',     label:'Industry Margin (%)',               source:'DB', category:'Industry'},
+  {id:'v10',name:'monthly_income',      label:'Monthly Income (₹)',                source:'DB', category:'Financial'},
+  {id:'v11',name:'hue',                 label:'HUE — Home/Utility Expenditure',    source:'DB', category:'Financial'},
+  {id:'v12',name:'relationship_years',  label:'Relationship Years (Vendor↔Anchor)',source:'DB', category:'Relationship'},
+  {id:'v13',name:'business_vintage',    label:'Business Vintage (years)',          source:'DB', category:'Applicant'},
+  {id:'v14',name:'current_revenue',     label:'Current Revenue (₹)',               source:'DB', category:'Financial'},
+  {id:'v15',name:'credit_score',        label:'Credit Score (CIBIL)',              source:'DB', category:'Risk'},
+  {id:'v16',name:'no_of_invoices',      label:'No. of Invoices (last 12m)',         source:'DB', category:'Relationship'},
+  {id:'v17',name:'max_invoice_value',   label:'Max Invoice Value (₹)',             source:'DB', category:'Financial'},
+];
+
+// Formula token schema:
+// {type:'var',    varId:'v3'}
+// {type:'num',    value:'1.5'}
+// {type:'pct',    value:'30'}          → evaluates as 30/100 = 0.30
+// {type:'op',     value:'+'}           → one of: + − × ÷
+// {type:'open'}                        → (
+// {type:'close'}                       → )
+
+let rules = [
+  mk('r1',  'Max Loan = Turnover × Multiple',              true, 1,  'Max Loan',  [], [{type:'var',varId:'v1'},{type:'op',value:'×'},{type:'num',value:'1.5'}]),
+  mk('r2',  'Max Loan = (Turnover × Multiple) − Borrowings',false,2, 'Max Loan',  [], [{type:'open'},{type:'var',varId:'v1'},{type:'op',value:'×'},{type:'num',value:'1'},{type:'close'},{type:'op',value:'−'},{type:'var',varId:'v2'}]),
+  mk('r3',  'ABB Adjusted for Utilisation × Multiple',     false,3,  'Adj ABB',   [], [{type:'var',varId:'v3'},{type:'op',value:'×'},{type:'open'},{type:'num',value:'1'},{type:'op',value:'−'},{type:'var',varId:'v4'},{type:'op',value:'÷'},{type:'var',varId:'v5'},{type:'close'},{type:'op',value:'×'},{type:'num',value:'1'}]),
+  mk('r4',  'Include ABB (Direct)',                         false,4,  'Max Loan',  [], [{type:'var',varId:'v3'},{type:'op',value:'×'},{type:'num',value:'1'}]),
+  mk('r5',  'Max EMI = Industry Income × Multiple',         false,5,  'Max EMI',   [], [{type:'var',varId:'v8'},{type:'op',value:'×'},{type:'num',value:'1'}]),
+  mk('r6',  'Max EMI = Industry Income × Multiple + Margin',false,6,  'Max EMI',   [], [{type:'open'},{type:'var',varId:'v8'},{type:'op',value:'×'},{type:'num',value:'1'},{type:'close'},{type:'op',value:'+'},{type:'var',varId:'v9'}]),
+  mk('r7',  'Max EMI = Monthly Income × Multiple',          false,7,  'Max EMI',   [], [{type:'var',varId:'v10'},{type:'op',value:'×'},{type:'num',value:'1'}]),
+  mk('r8',  'Max EMI = HUE × Multiple',                    false,8,  'Max EMI',   [], [{type:'var',varId:'v11'},{type:'op',value:'×'},{type:'num',value:'1'}]),
+  mk('r9',  'Max EMI = ABB × Multiple',                    false,9,  'Max EMI',   [], [{type:'var',varId:'v3'},{type:'op',value:'×'},{type:'num',value:'1'}]),
+  mk('r10', 'Max EMI = AdjABB × Multiple',                 false,10, 'Max EMI',   [], [{type:'var',varId:'v6'},{type:'op',value:'×'},{type:'num',value:'1'}]),
+  mk('r11', 'Max EMI = GST × Multiple',                    false,11, 'Max EMI',   [], [{type:'var',varId:'v7'},{type:'op',value:'×'},{type:'num',value:'1'}]),
+  mk('r12', 'Max EMI = GST × Multiple + Industry Margin',  false,12, 'Max EMI',   [], [{type:'open'},{type:'var',varId:'v7'},{type:'op',value:'×'},{type:'num',value:'1'},{type:'close'},{type:'op',value:'+'},{type:'var',varId:'v9'}]),
+  mk('r13', 'SCF: New Vendor / Early-Stage Dealer',        false,13, 'Max Loan',
+     [{id:'c1',varId:'v12',op:'==',val:'0',val2:''},{id:'c2',varId:'v13',op:'<',val:'2',val2:''}],
+     [{type:'pct',value:'30'},{type:'op',value:'×'},{type:'var',varId:'v14'}]),
+  mk('r14', 'SCF: Established Relationship Boost',         false,14, 'Max Loan',
+     [{id:'c3',varId:'v12',op:'>=',val:'3',val2:''},{id:'c4',varId:'v15',op:'>=',val:'700',val2:''}],
+     [{type:'pct',value:'60'},{type:'op',value:'×'},{type:'var',varId:'v14'}]),
+];
+
+function mk(id,name,active,priority,outputType,conditions,tokens,cap='',floor='',description='',logic='AND'){
+  return {id,name,active,priority,outputType,conditions,tokens,cap,floor,description,logic};
+}
+
+let expanded = new Set();
+
+// ═══════════════════════════════════════
+// FORMULA EVALUATION
+// Uses Shunting-Yard to build proper AST.
+// USER NEVER SEES THIS — it's the engine.
+// ═══════════════════════════════════════
+
+function evalTokens(tokens, varValues) {
+  // Convert token objects → plain expression string → evaluate properly
+  // This handles BODMAS and brackets correctly
+  const warnings = [];
+
+  // Step 1: Build expression string from tokens
+  const parts = tokens.map(t => {
+    if(t.type === 'open')  return '(';
+    if(t.type === 'close') return ')';
+    if(t.type === 'op')    return OP_SYMS[t.value] || t.value; // ×→*, ÷→/, etc.
+    if(t.type === 'num')   return String(parseFloat(t.value) || 0);
+    if(t.type === 'pct')   return String(parseFloat(t.value) / 100);
+    if(t.type === 'var') {
+      const v = variables.find(v => v.id === t.varId);
+      if(!v) { warnings.push(`Deleted variable (${t.varId}) treated as 0.`); return '0'; }
+      const val = varValues[v.id];
+      if(val === null || val === undefined || val === '') {
+        warnings.push(`"${v.name}" has no value — treated as 0.`);
+        return '0';
+      }
+      return String(parseFloat(val) || 0);
+    }
+    return '0';
+  });
+  const expr = parts.join(' ');
+  if(!expr.trim()) return { value: 0, warnings, error: 'Formula is empty.' };
+
+  // Step 2: Shunting-Yard algorithm (classic BODMAS + brackets)
+  const prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+  const numToks = [], opStack = [];
+  const rawToks = expr.match(/[\d.]+|[+\-*/()]/g) || [];
+
+  try {
+    let prev = null;
+    for(const tok of rawToks) {
+      if(/^[\d.]+$/.test(tok)) {
+        numToks.push(parseFloat(tok));
+        prev = 'num';
+      } else if(tok === '(') {
+        opStack.push(tok);
+        prev = '(';
+      } else if(tok === ')') {
+        while(opStack.length && opStack[opStack.length-1] !== '(') {
+          applyOp(numToks, opStack.pop(), warnings);
+        }
+        if(!opStack.length) throw new Error('Mismatched closing bracket');
+        opStack.pop();
+        prev = ')';
+      } else {
+        // Handle unary minus: if '-' appears at start or after operator/'('
+        let op = tok;
+        if(op === '-' && (prev === null || prev === 'op' || prev === '(')) {
+          // Unary minus — push a 0 before it so we can compute 0 - x
+          numToks.push(0);
+        }
+        while(opStack.length && opStack[opStack.length-1] !== '(' &&
+              prec[opStack[opStack.length-1]] >= prec[op]) {
+          applyOp(numToks, opStack.pop(), warnings);
+        }
+        opStack.push(op);
+        prev = 'op';
+      }
+    }
+    while(opStack.length) {
+      if(opStack[opStack.length-1] === '(') throw new Error('Unclosed bracket in formula');
+      applyOp(numToks, opStack.pop(), warnings);
+    }
+    if(numToks.length !== 1) throw new Error('Formula is malformed.');
+    let result = numToks[0];
+    if(!isFinite(result)) { warnings.push('Result is Infinity/NaN — check for division by zero.'); result = 0; }
+    if(result < 0) { warnings.push(`Result is negative (${fmtN(result)}) — floored to 0.`); result = 0; }
+    return { value: result, warnings, error: null };
+  } catch(e) {
+    return { value: 0, warnings, error: e.message };
+  }
+}
+
+function applyOp(stack, op, warnings) {
+  if(stack.length < 2) throw new Error('Not enough operands');
+  const b = stack.pop(), a = stack.pop();
+  if(op === '/' && b === 0) {
+    warnings.push(`Division by zero (${fmtN(a)} ÷ 0) — result set to 0.`);
+    stack.push(0);
+  } else {
+    const r = op==='+'?a+b : op==='-'?a-b : op==='*'?a*b : a/b;
+    stack.push(r);
+  }
+}
+
+// Validate formula structure (bracket balance, non-empty)
+function validateTokens(tokens) {
+  if(!tokens || !tokens.length) return { ok: false, msg: 'No formula defined.' };
+  let depth = 0;
+  for(const t of tokens) {
+    if(t.type==='open')  depth++;
+    if(t.type==='close') depth--;
+    if(depth < 0) return { ok: false, msg: 'Extra closing bracket ")" without matching "(".' };
+  }
+  if(depth > 0) return { ok: false, msg: `${depth} opening bracket(s) not closed.` };
+  // Check orphaned variable
+  for(const t of tokens) {
+    if(t.type==='var' && !variables.find(v=>v.id===t.varId))
+      return { ok: false, msg: `Formula contains a deleted variable. Remove or replace it.` };
+  }
+  return { ok: true, msg: 'Valid' };
+}
+
+// ═══════════════════════════════════════
+// FORMULA PREVIEW (human-readable)
+// ═══════════════════════════════════════
+function previewTokens(tokens) {
+  if(!tokens||!tokens.length) return '<span style="color:#bbb;font-style:italic">No formula</span>';
+  return tokens.map(t => {
+    if(t.type==='open')  return `<span class="fp-br">(</span>`;
+    if(t.type==='close') return `<span class="fp-br">)</span>`;
+    if(t.type==='op')    return `<span class="fp-op"> ${t.value} </span>`;
+    if(t.type==='num')   return `<span class="fp-num">${esc(t.value)}</span>`;
+    if(t.type==='pct')   return `<span class="fp-pct">${esc(t.value)}%</span>`;
+    if(t.type==='var') {
+      const v = variables.find(v=>v.id===t.varId);
+      return v
+        ? `<span class="fp-var" title="${esc(v.label)}">${esc(v.name)}</span>`
+        : `<span style="color:#c00" title="Deleted variable">[deleted]</span>`;
+    }
+    return '';
+  }).join('');
+}
+
+// Plain text preview (for collapsed card)
+function plainPreview(tokens) {
+  if(!tokens||!tokens.length) return '(no formula)';
+  return tokens.map(t=>{
+    if(t.type==='open')  return '(';
+    if(t.type==='close') return ')';
+    if(t.type==='op')    return ` ${t.value} `;
+    if(t.type==='num')   return t.value;
+    if(t.type==='pct')   return t.value+'%';
+    if(t.type==='var')   return variables.find(v=>v.id===t.varId)?.name||'[?]';
+    return '';
+  }).join('').trim();
+}
+
+// ═══════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════
+const uid = () => Math.random().toString(36).slice(2,7);
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const opL = v => OPERATORS.find(o=>o.v===v)?.l || v;
+const fmtN = n => n.toLocaleString('en-IN',{maximumFractionDigits:2});
+const fmt  = n => '₹ ' + Math.round(n).toLocaleString('en-IN');
+
+function render(){renderRules();renderVars();renderSimInputs();updateCount();}
+function updateCount(){
+  const a=rules.filter(r=>r.active).length;
+  document.getElementById('rule-count').textContent=`${a}/${rules.length} active`;
+}
+
+// ── RULE LIST ──────────────────────────
+function renderRules(){
+  const list=document.getElementById('rules-list');
+  const ph=document.getElementById('no-rules');
+  const sorted=[...rules].sort((a,b)=>a.priority-b.priority);
+  ph.style.display=sorted.length?'none':'block';
+  list.innerHTML=sorted.map(r=>ruleCard(r)).join('');
+  // priority conflict banner
+  const pm={};
+  rules.filter(r=>r.active).forEach(r=>{(pm[r.priority]=pm[r.priority]||[]).push(r.name);});
+  document.getElementById('pri-conflicts').innerHTML=
+    Object.entries(pm).filter(([,n])=>n.length>1)
+    .map(([p,n])=>`<div class="pri-conflict">⚠ Priority conflict: "${n.join('" and "')}" both have priority ${p}. Set unique priorities.</div>`).join('');
+}
+
+function ruleCard(r){
+  const open=expanded.has(r.id);
+  const vr=validateTokens(r.tokens);
+  const hasErr=r.active&&!vr.ok;
+  const condTxt=(r.conditions||[]).length
+    ?(r.conditions||[]).map((c,i)=>{
+        const v=variables.find(v=>v.id===c.varId);
+        const p=`${v?v.name:c.varId} ${opL(c.op)} ${c.val}${c.op==='between'?' & '+c.val2:''}`;
+        return i<(r.conditions||[]).length-1?`${p} ${r.logic}`:p;
+      }).join(' ')
+    :'Always';
+  const formulaTxt = plainPreview(r.tokens);
+  return `<div class="rule-card ${r.active?'on':''}${hasErr?' err':''}" id="card-${r.id}">
+  <div class="rule-header" onclick="toggleCard('${r.id}')">
+    <div class="toggle ${r.active?'on':''}" onclick="event.stopPropagation();flipActive('${r.id}')"></div>
+    <div class="rule-meta">
+      <div class="rule-name-row">
+        ${esc(r.name)}
+        ${r.outputType?`<span class="tag tag-type">${esc(r.outputType)}</span>`:''}
+        <span class="pri-tag">P${r.priority}</span>
+        ${!r.active?'<span class="tag tag-off">Off</span>':''}
+        ${hasErr?`<span class="tag tag-err">⚠ ${esc(vr.msg)}</span>`:''}
+      </div>
+      ${!open?`<div class="rule-preview">IF ${esc(condTxt)} → ${esc(formulaTxt)}</div>`:''}
+    </div>
+    <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+      <button class="btn" onclick="dupRule('${r.id}')">Clone</button>
+      <button class="btn btn-danger" onclick="delRule('${r.id}')">Delete</button>
+      <span style="color:#aaa;font-size:11px;margin-left:2px">${open?'▲':'▼'}</span>
+    </div>
+  </div>
+  <div class="rule-body ${open?'open':''}" id="body-${r.id}">${open?ruleBody(r):''}</div>
+</div>`;
+}
+
+function ruleBody(r){
+  const vr=validateTokens(r.tokens);
+  return `
+<div class="row" style="margin-top:8px">
+  <div class="col"><label class="fl">Rule Name</label>
+    <input class="fi" value="${esc(r.name)}" onchange="updR('${r.id}','name',this.value)"/></div>
+  <div class="col" style="min-width:170px"><label class="fl">Description</label>
+    <input class="fi" value="${esc(r.description||'')}" onchange="updR('${r.id}','description',this.value)"/></div>
+  <div class="col" style="max-width:75px"><label class="fl">Priority</label>
+    <input class="fi" type="number" min="1" value="${r.priority}" onchange="updR('${r.id}','priority',+this.value)"/></div>
+  <div class="col" style="max-width:110px"><label class="fl">Output Type</label>
+    <select class="fsel" onchange="updR('${r.id}','outputType',this.value)">
+      ${['Max Loan','Max EMI','Adj ABB','Other'].map(t=>`<option ${r.outputType===t?'selected':''}>${t}</option>`).join('')}
+    </select></div>
+</div>
+<hr class="div"/>
+<div class="sec-sub">IF Conditions
+  <select class="fsel" style="font-weight:normal;text-transform:none;letter-spacing:0;font-size:11px" onchange="updR('${r.id}','logic',this.value)">
+    <option value="AND" ${r.logic==='AND'?'selected':''}>ALL must match (AND)</option>
+    <option value="OR"  ${r.logic==='OR'?'selected':''}>ANY must match (OR)</option>
+  </select>
+  <span style="font-weight:normal;text-transform:none;letter-spacing:0;font-size:11px;color:#aaa">Leave empty = always fires when ON.</span>
+</div>
+<div id="conds-${r.id}">${(r.conditions||[]).map((c,i)=>condRow(r,c,i)).join('')}</div>
+<button class="btn-dashed" onclick="addCond('${r.id}')">+ Add Condition</button>
+<hr class="div"/>
+<div class="sec-sub">THEN — Limit Formula</div>
+<div class="formula-wrap">
+  <div style="font-size:11px;color:#777;margin-bottom:6px">
+    Click tokens to build. Use <b>( )</b> to group expressions — brackets are evaluated correctly (BODMAS).
+    <b>%</b> token = divide by 100 automatically. <b>Number</b> = your multiple/constant.
+  </div>
+  <!-- Token display row -->
+  <div class="token-row" id="trow-${r.id}">${renderTokRow(r)}</div>
+  <!-- Add token buttons -->
+  <div class="add-row">
+    <button class="add-btn add-btn-var" onclick="addTok('${r.id}','var')">+ Variable</button>
+    <button class="add-btn add-btn-num" onclick="addTok('${r.id}','num')">+ Number</button>
+    <button class="add-btn add-btn-pct" onclick="addTok('${r.id}','pct')">+ %</button>
+    <button class="add-btn add-btn-op"  onclick="addTok('${r.id}','op')">+ Operator</button>
+    <button class="add-btn add-btn-br"  onclick="addTok('${r.id}','open')">( Open</button>
+    <button class="add-btn add-btn-br"  onclick="addTok('${r.id}','close')">Close )</button>
+  </div>
+  <!-- Validation -->
+  <div class="formula-hint ${vr.ok?'hint-ok':'hint-err'}">${vr.ok?'✓ Formula is valid':'✖ '+esc(vr.msg)}</div>
+  <!-- Preview -->
+  <div style="font-size:11px;color:#555;margin-top:6px;margin-bottom:3px;font-weight:bold">Preview:</div>
+  <div class="formula-preview" id="fprev-${r.id}">${previewTokens(r.tokens)}</div>
+  <!-- Cap / Floor -->
+  <div class="row" style="margin-top:10px">
+    <div class="col" style="max-width:155px"><label class="fl">Rule Cap (Max ₹)</label>
+      <input class="fi" type="number" placeholder="no cap" value="${esc(r.cap||'')}" onchange="updR('${r.id}','cap',this.value)"/></div>
+    <div class="col" style="max-width:155px"><label class="fl">Rule Floor (Min ₹)</label>
+      <input class="fi" type="number" placeholder="no floor" value="${esc(r.floor||'')}" onchange="updR('${r.id}','floor',this.value)"/></div>
+  </div>
+</div>`;
+}
+
+// ── TOKEN ROW HTML ─────────────────────
+function renderTokRow(r){
+  const toks=r.tokens||[];
+  if(!toks.length) return '<span class="token-empty">No tokens yet — add from buttons below</span>';
+  return toks.map((t,i)=>{
+    const del=`<button class="tok-x" onclick="remTok('${r.id}',${i})" title="Remove">×</button>`;
+    if(t.type==='open')  return `<span class="tok tok-open">(${del}</span>`;
+    if(t.type==='close') return `<span class="tok tok-close">)${del}</span>`;
+    if(t.type==='op')
+      return `<span class="tok tok-op">
+        <select id="top-${r.id}-${i}" onchange="updTok('${r.id}',${i},'value',this.value)">
+          ${['+','−','×','÷'].map(s=>`<option value="${s}" ${s===t.value?'selected':''}>${s}</option>`).join('')}
+        </select>${del}</span>`;
+    if(t.type==='num')
+      return `<span class="tok tok-num">
+        <input id="tinp-${r.id}-${i}" type="number" value="${esc(t.value)}" step="any"
+          onchange="updTok('${r.id}',${i},'value',this.value)" style="width:58px"/>
+        ${del}</span>`;
+    if(t.type==='pct')
+      return `<span class="tok tok-pct">
+        <input id="tinp-${r.id}-${i}" type="number" value="${esc(t.value)}" step="any"
+          onchange="updTok('${r.id}',${i},'value',this.value)" style="width:38px"/>%${del}</span>`;
+    if(t.type==='var') {
+      return `<span class="tok tok-var">
+        <select id="tsel-${r.id}-${i}" onchange="updTok('${r.id}',${i},'varId',this.value)">
+          ${variables.map(v=>`<option value="${v.id}" ${v.id===t.varId?'selected':''}>${esc(v.name)}</option>`).join('')}
+        </select>${del}</span>`;
+    }
+    return '';
+  }).join('');
+}
+
+// Refresh just the token row + validation + preview (no full re-render)
+function refreshFormula(rId){
+  const r=rules.find(r=>r.id===rId); if(!r)return;
+  const trow=document.getElementById(`trow-${rId}`);
+  const fprev=document.getElementById(`fprev-${rId}`);
+  if(trow) trow.innerHTML=renderTokRow(r);
+  if(fprev) fprev.innerHTML=previewTokens(r.tokens);
+  const vr=validateTokens(r.tokens);
+  const hint=document.querySelector(`#body-${rId} .formula-hint`);
+  if(hint){hint.className='formula-hint '+(vr.ok?'hint-ok':'hint-err');hint.textContent=(vr.ok?'✓ Formula is valid':'✖ '+vr.msg);}
+  // update card preview line
+  const prev=document.querySelector(`#card-${rId} .rule-preview`);
+  if(prev) prev.textContent=`IF ${condTxtFor(r)} → ${plainPreview(r.tokens)}`;
+}
+
+function condTxtFor(r){
+  if(!(r.conditions||[]).length) return 'Always';
+  return (r.conditions||[]).map((c,i)=>{
+    const v=variables.find(v=>v.id===c.varId);
+    const p=`${v?v.name:c.varId} ${opL(c.op)} ${c.val}`;
+    return i<(r.conditions||[]).length-1?`${p} ${r.logic}`:p;
+  }).join(' ');
+}
+
+// ── TOKEN ACTIONS ──────────────────────
+function addTok(rId, type){
+  const r=rules.find(r=>r.id===rId); if(!r)return;
+  if(!r.tokens)r.tokens=[];
+  const defaults={
+    var:   {type:'var',  varId:variables[0]?.id||''},
+    num:   {type:'num',  value:'1'},
+    pct:   {type:'pct',  value:'30'},
+    op:    {type:'op',   value:'×'},
+    open:  {type:'open'},
+    close: {type:'close'},
+  };
+  r.tokens.push({...defaults[type]});
+  refreshFormula(rId);
+}
+function remTok(rId, i){
+  const r=rules.find(r=>r.id===rId); if(!r)return;
+  r.tokens.splice(i,1);
+  refreshFormula(rId);
+}
+function updTok(rId, i, key, val){
+  const r=rules.find(r=>r.id===rId); if(!r||!r.tokens[i])return;
+  r.tokens[i][key]=val;
+  refreshFormula(rId);
+}
+
+// ── RULE ACTIONS ───────────────────────
+function toggleCard(id){
+  if(expanded.has(id))expanded.delete(id); else expanded.add(id);
+  const r=rules.find(r=>r.id===id); if(!r)return;
+  const body=document.getElementById(`body-${id}`);
+  const open=expanded.has(id);
+  if(body){body.className='rule-body'+(open?' open':'');if(open)body.innerHTML=ruleBody(r);}
+  const card=document.getElementById(`card-${id}`);
+  if(card){
+    const ch=card.querySelector('.rule-header>div:last-child span');
+    const pv=card.querySelector('.rule-preview');
+    if(ch)ch.textContent=open?'▲':'▼';
+    if(pv)pv.style.display=open?'none':'block';
+  }
+}
+function flipActive(id){
+  const r=rules.find(r=>r.id===id); if(!r)return;
+  r.active=!r.active; renderRules(); updateCount();
+}
+function updR(id,k,v){
+  const r=rules.find(r=>r.id===id); if(r)r[k]=v; updateCount();
+}
+function addRule(){
+  const nr=mk('r'+uid(),'New Rule',false,rules.length+1,'Max Loan',[],[]);
+  rules.push(nr); expanded.add(nr.id); renderRules(); updateCount();
+}
+function delRule(id){
+  if(!confirm('Delete this rule?'))return;
+  rules=rules.filter(r=>r.id!==id); expanded.delete(id); renderRules(); updateCount();
+}
+function dupRule(id){
+  const r=rules.find(r=>r.id===id); if(!r)return;
+  const c=JSON.parse(JSON.stringify(r));
+  c.id='r'+uid(); c.name+=' (Copy)'; c.active=false; c.priority=rules.length+1;
+  c.conditions=(c.conditions||[]).map(x=>({...x,id:uid()}));
+  rules.push(c); renderRules(); updateCount();
+}
+function selAgg(btn,mode){
+  aggMode=mode;
+  document.querySelectorAll('.agg-opt').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+}
+
+// ── CONDITIONS ─────────────────────────
+function condRow(r,c,i){
+  const ib=c.op==='between';
+  return `<div class="cond-row" id="crow-${r.id}-${i}">
+    <select class="c-sel" id="csv-${r.id}-${i}">${variables.map(v=>`<option value="${v.id}" ${v.id===c.varId?'selected':''}>${esc(v.name)}</option>`).join('')}</select>
+    <select class="c-sel" id="cso-${r.id}-${i}">${OPERATORS.map(o=>`<option value="${o.v}" ${o.v===c.op?'selected':''}>${o.l}</option>`).join('')}</select>
+    <input class="c-inp" id="civ-${r.id}-${i}" value="${esc(c.val)}" placeholder="value"/>
+    ${ib?`<span style="color:#888">and</span><input class="c-inp" id="civ2-${r.id}-${i}" value="${esc(c.val2)}" placeholder="value"/>`:''}
+    <button class="btn btn-danger" style="padding:2px 8px;font-size:11px" onclick="remCond('${r.id}',${i})">Remove</button>
+    ${i<(r.conditions||[]).length-1?`<button class="logic-btn" onclick="togLogic('${r.id}')">${r.logic}</button>`:''}
+  </div>`;
+}
+function bindCond(rId,i){
+  const vs=document.getElementById(`csv-${rId}-${i}`);
+  const os=document.getElementById(`cso-${rId}-${i}`);
+  const vi=document.getElementById(`civ-${rId}-${i}`);
+  const v2=document.getElementById(`civ2-${rId}-${i}`);
+  if(vs)vs.onchange=e=>updCond(rId,i,'varId',e.target.value);
+  if(os)os.onchange=e=>updCond(rId,i,'op',e.target.value);
+  if(vi)vi.onchange=e=>updCond(rId,i,'val',e.target.value);
+  if(v2)v2.onchange=e=>updCond(rId,i,'val2',e.target.value);
+}
+function updCond(rId,i,k,v){
+  const r=rules.find(r=>r.id===rId); if(!r||!(r.conditions||[])[i])return;
+  r.conditions[i][k]=v;
+  if(k==='op'){const b=document.getElementById(`body-${rId}`);if(b){b.innerHTML=ruleBody(r);(r.conditions||[]).forEach((_,j)=>bindCond(rId,j));}}
+}
+function togLogic(rId){
+  const r=rules.find(r=>r.id===rId); if(!r)return;
+  r.logic=r.logic==='AND'?'OR':'AND';
+  const b=document.getElementById(`body-${rId}`);
+  if(b){b.innerHTML=ruleBody(r);(r.conditions||[]).forEach((_,j)=>bindCond(rId,j));}
+}
+function addCond(id){
+  const r=rules.find(r=>r.id===id); if(!r)return;
+  if(!r.conditions)r.conditions=[];
+  r.conditions.push({id:uid(),varId:variables[0]?.id||'',op:'==',val:'0',val2:''});
+  const b=document.getElementById(`body-${id}`);
+  if(b){b.innerHTML=ruleBody(r);r.conditions.forEach((_,i)=>bindCond(id,i));}
+}
+function remCond(rId,i){
+  const r=rules.find(r=>r.id===rId); if(!r)return;
+  r.conditions.splice(i,1);
+  const b=document.getElementById(`body-${rId}`);
+  if(b){b.innerHTML=ruleBody(r);r.conditions.forEach((_,j)=>bindCond(rId,j));}
+}
+
+// ── VARIABLES ──────────────────────────
+function renderVars(){
+  document.getElementById('vars-list').innerHTML=
+    [...new Set(variables.map(v=>v.category))].map(cat=>{
+      const col=CAT_COL[cat]||'#333';
+      return `<div class="var-cat" style="color:${col}">${cat}</div>
+        <div class="var-chips">${variables.filter(v=>v.category===cat).map(v=>`
+          <div class="var-chip">
+            <span class="vn">${esc(v.name)}</span>
+            <span class="vl">${esc(v.label)}</span>
+            <span class="vs">[${esc(v.source)}]</span>
+            <button class="vdel" onclick="delVar('${v.id}')" title="Remove">×</button>
+          </div>`).join('')}
+        </div>`;
+    }).join('');
+}
+function toggleAddVar(){
+  const el=document.getElementById('add-var-panel');
+  el.style.display=el.style.display==='block'?'none':'block';
+}
+function saveNewVar(){
+  const name=document.getElementById('nv-name').value.trim();
+  const label=document.getElementById('nv-label').value.trim();
+  if(!name||!label){alert('Code name and label required.');return;}
+  if(!/^[a-z_][a-z0-9_]*$/.test(name)){alert('Code name: lowercase letters, numbers, underscores only. Must start with a letter/underscore.');return;}
+  if(variables.find(v=>v.name===name)){alert(`"${name}" already exists.`);return;}
+  variables.push({id:'v'+uid(),name,label,source:document.getElementById('nv-src').value,category:document.getElementById('nv-cat').value});
+  document.getElementById('nv-name').value='';
+  document.getElementById('nv-label').value='';
+  toggleAddVar(); render();
+}
+function delVar(id){
+  const v=variables.find(v=>v.id===id); if(!v)return;
+  const used=rules.filter(r=>(r.tokens||[]).some(t=>t.varId===id)||(r.conditions||[]).some(c=>c.varId===id));
+  if(used.length&&!confirm(`"${v.name}" is used in: ${used.map(r=>r.name).join(', ')}.\nRemoving it will flag those rules with an error. Continue?`))return;
+  variables=variables.filter(v=>v.id!==id); render();
+}
+
+// ── SIMULATE ───────────────────────────
+function renderSimInputs(){
+  document.getElementById('sim-inputs').innerHTML=variables.map(v=>`
+    <div class="sim-field">
+      <label style="color:${CAT_COL[v.category]||'#444'}" title="${esc(v.label)}">${esc(v.name)}</label>
+      <input class="fi" id="sv-${v.id}" type="number" placeholder="enter value"/>
+    </div>`).join('');
+}
+function getVals(){
+  const o={};
+  variables.forEach(v=>{
+    const e=document.getElementById(`sv-${v.id}`);
+    o[v.id]=e&&e.value!==''?parseFloat(e.value):null;
+  });
+  return o;
+}
+function evalCond(c,vals){
+  const raw=vals[c.varId]; const val=raw===null||raw===undefined?0:parseFloat(raw);
+  const tgt=parseFloat(c.val||0), tgt2=parseFloat(c.val2||0);
+  return c.op==='=='?val===tgt:c.op==='!='?val!==tgt:c.op==='<'?val<tgt:c.op==='<='?val<=tgt:c.op==='>'?val>tgt:c.op==='>='?val>=tgt:c.op==='between'?val>=tgt&&val<=tgt2:false;
+}
+
+function runSim(){
+  const vals=getVals();
+
+  // Warn about null inputs used by active rules
+  const nullVars=new Set();
+  rules.filter(r=>r.active).forEach(r=>{
+    (r.tokens||[]).filter(t=>t.type==='var').forEach(t=>{
+      const v=variables.find(v=>v.id===t.varId);
+      if(v&&(vals[v.id]===null||vals[v.id]===undefined)) nullVars.add(v.name);
+    });
+  });
+  const nw=document.getElementById('sim-null-warn');
+  if(nullVars.size){
+    nw.style.display='block';
+    nw.textContent=`⚠ No value entered for: ${[...nullVars].join(', ')} — will default to 0. This may affect results.`;
+  } else nw.style.display='none';
+
+  const fired=[...rules].filter(r=>r.active).sort((a,b)=>a.priority-b.priority).filter(r=>{
+    const conds=r.conditions||[];
+    if(!conds.length){r._cr=[];return true;}
+    const cr=conds.map(c=>({c,pass:evalCond(c,vals)}));
+    r._cr=cr;
+    return r.logic==='AND'?cr.every(x=>x.pass):cr.some(x=>x.pass);
+  }).map(r=>{
+    const res=evalTokens(r.tokens||[],vals);
+    let lim=res.value;
+    if(r.cap&&parseFloat(r.cap))  lim=Math.min(lim,parseFloat(r.cap));
+    if(r.floor&&parseFloat(r.floor)) lim=Math.max(lim,parseFloat(r.floor));
+    return{rule:r,limit:lim,cr:r._cr||[],warnings:res.warnings,error:res.error};
+  });
+
+  const el=document.getElementById('sim-results');
+  if(!fired.length){
+    el.innerHTML='<div class="sim-none">No active rules fired. Enable at least one rule or adjust input values.</div>';
+    return;
+  }
+
+  const good=fired.filter(f=>!f.error);
+  let final=good.length?
+    (aggMode==='min'?Math.min(...good.map(f=>f.limit))
+    :aggMode==='max'?Math.max(...good.map(f=>f.limit))
+    :aggMode==='sum'?good.reduce((a,f)=>a+f.limit,0)
+    :good[0].limit) : 0;
+
+  const gf=parseFloat(document.getElementById('global-floor').value)||0;
+  const gc=parseFloat(document.getElementById('global-cap').value)||0;
+  if(gf) final=Math.max(final,gf);
+  if(gc&&gc>0) final=Math.min(final,gc);
+
+  el.innerHTML=fired.map(f=>`
+  <div class="sim-result ${f.error||f.warnings.length?'issue':''}">
+    <div class="sim-r-head">
+      <span class="sim-r-name">${f.error?'✖':'✓'} ${esc(f.rule.name)} ${f.rule.outputType?`<span style="font-size:11px;font-weight:normal;color:#666">[${esc(f.rule.outputType)}]</span>`:''}</span>
+      <span class="sim-r-amt">${f.error?'<span style="color:#c00;font-size:13px">Error</span>':fmt(f.limit)}</span>
+    </div>
+    ${f.error?`<div class="sim-warn">✖ ${esc(f.error)}</div>`:''}
+    ${f.warnings.map(w=>`<div class="sim-warn">⚠ ${esc(w)}</div>`).join('')}
+    <div class="sim-pills">
+      ${f.cr.length
+        ?f.cr.map(r=>`<span class="spill ${r.pass?'pass':'fail'}">${esc((variables.find(v=>v.id===r.c.varId)||{name:r.c.varId}).name)} ${opL(r.c.op)} ${r.c.val} ${r.pass?'✓':'✗'}</span>`).join('')
+        :'<span style="font-size:11px;color:#888">No conditions — always fires</span>'}
+    </div>
+    <div class="eval-row">${esc(plainPreview(f.rule.tokens))}</div>
+  </div>`).join('')+
+  `<div class="final-box">
+    <div>
+      <span class="final-label">Final Limit (${aggMode.toUpperCase()})</span>
+      ${gf||gc?`<div style="font-size:11px;color:#888;margin-top:2px">Global constraints applied</div>`:''}
+      ${good.length<fired.length?`<div style="font-size:11px;color:#c00;margin-top:2px">${fired.length-good.length} rule(s) had errors and were excluded.</div>`:''}
+    </div>
+    <span class="final-amt">${fmt(final)}</span>
+  </div>`;
+}
+
+// ── MISC ────────────────────────────────
+function switchTab(tabId,btn){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+tabId).classList.add('active');
+  btn.classList.add('active');
+}
+function handleSave(){
+  const b=document.getElementById('save-btn');
+  b.textContent='Saved ✓';b.classList.add('saved');
+  setTimeout(()=>{b.textContent='Save';b.classList.remove('saved');},2000);
+}
+
+render();
+</script>
+</body>
+</html>
